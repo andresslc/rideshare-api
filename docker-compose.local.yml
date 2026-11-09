@@ -1,0 +1,95 @@
+# Stack local completo: app + Redis + MongoDB.
+# No toca los compose de dev/staging/prod (esos apuntan a Atlas y a secretos reales).
+# Uso: docker compose -f docker-compose.local.yml up -d --build
+services:
+  app-local:
+    build: .
+    container_name: node_app_local
+    command: npx nodemon index.js
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      # replicaSet is what makes the driver treat this as a transaction-capable
+      # topology. The set advertises itself as "mongo-local:27017", which
+      # resolves inside the compose network. From the host use
+      # mongodb://localhost:27017/?directConnection=true instead.
+      - MONGO_URI=mongodb://mongo-local:27017/rideshare-local?replicaSet=rs0
+      - REDIS_HOST=redis-local
+      - REDIS_PORT=6379
+      - REDIS_IS_ENABLED=true
+      - REDIS_DB=0
+      - BULLMQ_ENABLED=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - uploads_local:/app/uploads
+    depends_on:
+      mongo-local:
+        condition: service_healthy
+      redis-local:
+        condition: service_healthy
+    networks:
+      - local-network
+
+  mongo-local:
+    image: mongo:7
+    container_name: mongo_local
+    restart: unless-stopped
+    # Several code paths open a MongoDB transaction — onboarding and wallet
+    # payments among them — and transactions are refused by a standalone server
+    # with "Transaction numbers are only allowed on a replica set member".
+    # A single-node replica set is enough; it just cannot be standalone.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_local_data:/data/db
+    healthcheck:
+      # Initiates the set on first boot and then reports healthy only once this
+      # node is actually primary, so the app never starts against a server that
+      # cannot yet accept writes. Re-running is safe: rs.status() succeeds once
+      # initiated, so initiate is only reached the first time.
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo-local:27017' }] }) }; quit(db.hello().isWritablePrimary ? 0 : 1)",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+    networks:
+      - local-network
+
+  redis-local:
+    image: redis:7-alpine
+    container_name: redis_local
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_local_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - local-network
+
+volumes:
+  mongo_local_data:
+  redis_local_data:
+  uploads_local:
+
+networks:
+  local-network:
+    driver: bridge

@@ -1,0 +1,41 @@
+version: "3.9"
+
+# Secrets live in .env.prod on the EC2 host (gitignored). Redis wiring stays
+# inline because it names services on the compose network.
+services:
+  app-prod:
+    build: .
+    container_name: node_app_prod
+    ports:
+      - "3000:3000"
+    restart: always
+    env_file:
+      - .env.prod
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis-prod
+      - REDIS_PORT=6379
+      - REDIS_IS_ENABLED=true
+      - REDIS_DB=0
+      - BULLMQ_ENABLED=true
+    depends_on:
+      - redis-prod
+    networks:
+      - prod-network
+
+  redis-prod:
+    image: redis:7-alpine
+    container_name: redis_prod
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_prod_data:/data
+    networks:
+      - prod-network
+
+volumes:
+  redis_prod_data:
+networks:
+  prod-network:
+    driver: bridge

@@ -1,0 +1,42 @@
+version: "3.9"
+
+# Secrets live in .env.dev on the host (gitignored). Redis wiring stays
+# inline because it names services on the compose network.
+services:
+  app-dev:
+    build: .
+    container_name: node_app_dev
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env.dev
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - REDIS_IS_ENABLED=true
+      - REDIS_DB=0
+      - BULLMQ_ENABLED=true
+    depends_on:
+      - redis-dev
+    networks:
+      - dev-network
+
+  redis-dev:
+    image: redis:7-alpine
+    container_name: redis_dev
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: >
+      redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    networks:
+      - dev-network
+
+volumes:
+  redis_dev_data:
+networks:
+  dev-network:
+    driver: bridge

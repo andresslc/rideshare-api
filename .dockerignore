@@ -1,0 +1,27 @@
+# Node
+node_modules/
+dist/
+npm-debug.log
+coverage/
+
+# Environment
+.env
+
+# Docker
+Dockerfile
+docker-compose*
+*.dockerfile
+
+# Git
+.git/
+.gitignore
+
+# VS Code
+.vscode/
+
+# GitHub Actions (workflow files)
+.github/
+
+# OS Files
+.DS_Store
+Thumbs.db
